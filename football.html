@@ -302,11 +302,13 @@ function setState(s) { state = s; stateTime = 0; uiHits.length = 0; }
 
 /* ---------------- Tournament ---------------- */
 let tour = null;
-function newTournament(playerIdx) {
+function newTournament(playerIdx, simAll = false) {
   // Fixed seeded bracket in TEAMS order: ARG-KSA, FRA-JPN, BRA-GER, ESP-ENG.
+  // simAll: CPU-vs-CPU mode — every tie is played out live by the AI.
   const mk = (a, b) => ({ a, b, sa: null, sb: null, w: null, et: false });
   tour = {
-    player: playerIdx,
+    player: simAll ? -1 : playerIdx,
+    simAll,
     round: 0,
     rounds: [
       [mk(0, 1), mk(2, 3), mk(4, 5), mk(6, 7)],
@@ -333,6 +335,13 @@ function playerMatch() {
   for (const m of tour.rounds[tour.round]) {
     if (m.w === null && (m.a === tour.player || m.b === tour.player)) return m;
   }
+  return null;
+}
+// Next tie to put on the pitch: in CPU-vs-CPU mode every unplayed tie, else the player's.
+function nextMatch() {
+  if (!tour || tour.round > 2) return null;
+  if (!tour.simAll) return playerMatch();
+  for (const m of tour.rounds[tour.round]) if (m.w === null) return m;
   return null;
 }
 function advanceRound() {
@@ -490,8 +499,14 @@ function handleTap(x, y) {
   if (stateTime < 0.35) return; // debounce state transitions
   switch (state) {
     case ST.MENU:
-      Sound.tap();
-      setState(ST.SELECT);
+      for (const r of uiHits) {
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+          Sound.tap();
+          if (r.mode === 'watch') { newTournament(0, true); setState(ST.BRACKET); }
+          else setState(ST.SELECT);
+          return;
+        }
+      }
       break;
     case ST.SELECT:
       for (const r of uiHits) {
@@ -504,7 +519,7 @@ function handleTap(x, y) {
       }
       break;
     case ST.BRACKET: {
-      const m = playerMatch();
+      const m = nextMatch();
       if (m) {
         Sound.whistle();
         startMatch(m);
@@ -521,14 +536,7 @@ function handleTap(x, y) {
     case ST.MATCH:
       if (match) {
         if (match.phase === 'paused') { match.phase = 'play'; Sound.tap(); }
-        else if (match.phase === 'fulltime' && match.phaseT > 0.6) {
-          // match.home is always the player, who may sit in slot a or b of the tie.
-          const pa = match.bm.a === tour.player;
-          finishPlayerMatch(match.bm,
-            pa ? match.home.score : match.away.score,
-            pa ? match.away.score : match.home.score, match.et);
-          match = null;
-        }
+        else if (match.phase === 'fulltime' && match.phaseT > 0.6) continueFromFullTime();
       }
       break;
   }
@@ -572,31 +580,43 @@ function jerseyFor(def, opponentCol, gkTaken) {
 }
 
 function startMatch(bm) {
-  const homeIdx = bm.a === tour.player ? bm.a : bm.b;
-  const awayIdx = bm.a === tour.player ? bm.b : bm.a;
+  const sim = tour.simAll;
+  const homeIdx = sim ? bm.a : (bm.a === tour.player ? bm.a : bm.b);
+  const awayIdx = sim ? bm.b : (bm.a === tour.player ? bm.b : bm.a);
   const hDef = TEAMS[homeIdx], aDef = TEAMS[awayIdx];
   const gkTaken = [];
   const hj = jerseyFor(hDef, aDef.col, gkTaken); gkTaken.push(hj.gk);
   const aj = jerseyFor(aDef, hj.col, gkTaken);
 
-  const home = { def: hDef, col: hj.col, gkCol: hj.gk, dir: 1, score: 0, user: true, players: [] };
+  const home = { def: hDef, col: hj.col, gkCol: hj.gk, dir: 1, score: 0, user: !sim, players: [] };
   const away = { def: aDef, col: aj.col, gkCol: aj.gk, dir: -1, score: 0, user: false, players: [] };
   home.opp = away; away.opp = home;
+  // Difficulty: base on team strength + round, then a per-match "form" factor so
+  // no two matches — or tournaments — ever play out the same way.
+  const skillOf = str => clamp((str - 70) / 25 + tour.round * 0.12, 0.6, 1.3);
+  if (sim) {
+    home.skill = clamp(skillOf(hDef.str) * rand(0.86, 1.16) + 0.3, 0.8, 1.6);
+    away.skill = clamp(skillOf(aDef.str) * rand(0.86, 1.16) + 0.3, 0.8, 1.6);
+    home.gkPlus = away.gkPlus = true;           // both keepers world-class
+  } else {
+    home.skill = 0.78;                          // your AI teammates
+    away.skill = clamp(skillOf(aDef.str) + 0.25, 0.8, 1.5);  // hard opponent
+    home.gkPlus = true; away.gkPlus = false;
+  }
   for (const [role, x, y] of formation(1)) home.players.push(makePlayer(home, role, x, y));
   for (const [role, x, y] of formation(-1)) away.players.push(makePlayer(away, role, x, y));
 
   match = {
-    bm, home, away,
+    bm, home, away, sim,
+    halfLen: sim ? 42 : HALF_LEN,              // brisker matches when watching the CPU cup
     ball: { x: PW / 2, y: CY, vx: 0, vy: 0, r: 7, owner: null, lastKicker: null, freeT: 0, passTo: null, roll: 0 },
-    controlled: home.players[3],
+    controlled: sim ? null : home.players[3],
     half: 1, t: 0, et: false,
     phase: 'kickoff', phaseT: 0,
     banner: null,            // {text, sub, t, dur}
     flash: 0,
     shootRelease: false,
     kickoffBy: Math.random() < 0.5 ? home : away,
-    // AI gets slightly sharper each round + with team strength.
-    aiSkill: clamp((aDef.str - 70) / 30 + tour.round * 0.12, 0.2, 1.15),
   };
   shootCharge = -1; passQueued = false;
   setKickoff();
@@ -620,7 +640,7 @@ function setKickoff() {
   const fw = m.kickoffBy.players[3];
   fw.x = PW / 2 - m.kickoffBy.dir * 26; fw.y = CY;
   m.phase = 'kickoff'; m.phaseT = 0;
-  if (m.home === m.kickoffBy) m.controlled = fw;
+  if (!m.sim && m.home === m.kickoffBy) m.controlled = fw;
 }
 
 /* ---------- possession helpers ---------- */
@@ -811,7 +831,7 @@ function isOffside(team, receiver, ballX) {
 }
 function gkThink(p) {
   const b = match.ball, own = p.team.dir === 1 ? 0 : PW;
-  const strong = p.team.user;                    // the user's keeper is a touch sharper
+  const strong = p.team.gkPlus;                  // world-class keeper flag
   const dBall = Math.abs(b.x - own);
   const inBox = dBall < BOX_W && Math.abs(b.y - CY) < BOX_H / 2;
   if (inBox && !b.owner && dBall < 150) {
@@ -827,7 +847,7 @@ function aiThink(p, dt) {
   if (p.aiT > 0) return;
   p.aiT = rand(0.12, 0.26);
 
-  const m = match, b = m.ball, team = p.team, skill = team.user ? 0.7 : m.aiSkill;
+  const m = match, b = m.ball, team = p.team, skill = team.skill;
   if (p.role === 'GK') { gkThink(p); return; }
 
   const owner = b.owner;
@@ -843,7 +863,7 @@ function aiThink(p, dt) {
     for (const o of team.opp.players) pressure = Math.min(pressure, dist(o.x, o.y, p.x, p.y));
     const shootRange = 240 + skill * 90;
     if (dGoal < shootRange && (Math.random() < 0.4 + skill * 0.3 || dGoal < 150)) {
-      doShoot(p, rand(0.7, 1), rand(-0.9, 0.9), 0.32 - skill * 0.16);
+      doShoot(p, rand(0.7, 1), rand(-0.9, 0.9), Math.max(0.03, 0.32 - skill * 0.16));
       return;
     }
     if (pressure < 62 && Math.random() < 0.75) {
@@ -938,8 +958,10 @@ function movePlayers(dt) {
         dvx = jx * jmag * speed; dvy = jy * jmag * speed;
       }
     } else {
-      const gkSpeed = p.team.user ? 205 : 182;
-      speed = (p.role === 'GK' ? gkSpeed : 190) * (m.ball.owner === p ? 0.86 : 1);
+      const gkSpeed = p.team.gkPlus ? 205 : 182;
+      // Sharper teams also move a touch quicker — noticeable but never unfair.
+      const outSpeed = 190 * (0.95 + 0.07 * clamp(p.team.skill || 0.8, 0.6, 1.6));
+      speed = (p.role === 'GK' ? gkSpeed : outSpeed) * (m.ball.owner === p ? 0.86 : 1);
       const dx = p.tx - p.x, dy = p.ty - p.y;
       const d = Math.hypot(dx, dy);
       const urg = clamp(d / 40, 0, 1);
@@ -1057,12 +1079,14 @@ function ballPhysics(dt) {
       if (b.freeT > 0 && p === b.lastKicker) continue;
       const d = dist(p.x, p.y, b.x, b.y);
       let reach = p.r + b.r + (p.lunge > 0 ? 9 : 3);
-      if (p.role === 'GK') reach += p.team.user ? 15 : 8;  // keepers have long arms; yours reach further
+      // Keepers have long arms; in CPU-vs-CPU both are strong but slightly more
+      // beatable so scorelines stay varied and entertaining.
+      if (p.role === 'GK') reach += p.team.gkPlus ? (m.sim ? 12 : 15) : 8;
       if (d < reach && d < bd) { bd = d; taker = p; }
     }
     if (taker) {
       const speed = Math.hypot(b.vx, b.vy);
-      const fumbleP = taker.team.user ? 0.12 : 0.4;         // your keeper spills far fewer shots
+      const fumbleP = taker.team.gkPlus ? (m.sim ? 0.24 : 0.14) : 0.4;
       if (taker.role === 'GK' && speed > 560 && Math.random() < fumbleP) {
         // Fumbled save: parry the shot away.
         const n = norm(b.x - taker.x, b.y - taker.y);
@@ -1102,19 +1126,18 @@ function updateMatch(dt) {
       break;
     case 'play': {
       m.t += dt;
-      updateControlled();
-      userActions(dt);
+      if (!m.sim) { updateControlled(); userActions(dt); }
       const all = m.home.players.concat(m.away.players);
       for (const p of all) aiThink(p, dt);
       movePlayers(dt);
       ballPhysics(dt);
       // Clock milestones.
       if (!m.et) {
-        if (m.half === 1 && m.t >= HALF_LEN) {
+        if (m.half === 1 && m.t >= m.halfLen) {
           m.half = 2; m.phase = 'halftime'; m.phaseT = 0;
           showBanner('HALF-TIME', scoreLine(m), 2.0);
           Sound.whistle(2);
-        } else if (m.half === 2 && m.t >= HALF_LEN * 2) {
+        } else if (m.half === 2 && m.t >= m.halfLen * 2) {
           if (m.home.score !== m.away.score) {
             endMatch();
           } else {
@@ -1139,9 +1162,30 @@ function updateMatch(dt) {
       if (m.phaseT > 2.0) setKickoff();
       break;
     case 'fulltime':
+      if (m.sim && m.phaseT > 3.0) continueFromFullTime();  // CPU cup runs itself
+      break;
     case 'paused':
       break;
   }
+}
+// Advance out of the full-time screen: record the result and move the cup along.
+function continueFromFullTime() {
+  const m = match;
+  if (tour.simAll) {
+    const bm = m.bm;
+    bm.sa = m.home.score; bm.sb = m.away.score; bm.et = m.et;
+    bm.w = bm.sa > bm.sb ? bm.a : bm.b;
+    if (tour.rounds[tour.round].every(x => x.w !== null)) advanceRound();
+    if (tour.champion !== null) { setState(ST.CHAMPION); Sound.champ(); }
+    else setState(ST.BRACKET);
+  } else {
+    // match.home is always the player, who may sit in slot a or b of the tie.
+    const pa = m.bm.a === tour.player;
+    finishPlayerMatch(m.bm,
+      pa ? m.home.score : m.away.score,
+      pa ? m.away.score : m.home.score, m.et);
+  }
+  match = null;
 }
 function endMatch() {
   const m = match;
@@ -1155,7 +1199,7 @@ function scoreLine(m) {
 }
 function clockText(m) {
   if (m.et) return 'ET';
-  const mins = Math.min(90, Math.floor(m.t / HALF_LEN * 45));
+  const mins = Math.min(90, Math.floor(m.t / m.halfLen * 45));
   return mins + "'";
 }
 
@@ -1446,9 +1490,16 @@ function drawFullTime(c) {
   c.fillRect(0, 0, W, H);
   const won = m.home.score > m.away.score;
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillStyle = won ? '#7ce8a8' : '#ff8a80';
-  c.font = '900 34px system-ui, sans-serif';
-  c.fillText(won ? 'VICTORY!' : 'FULL TIME', W / 2, H * 0.28);
+  if (m.sim) {
+    const w = won ? m.home : m.away;
+    c.fillStyle = '#7ce8a8';
+    c.font = '900 34px system-ui, sans-serif';
+    c.fillText(w.def.name.toUpperCase() + ' WIN!', W / 2, H * 0.28);
+  } else {
+    c.fillStyle = won ? '#7ce8a8' : '#ff8a80';
+    c.font = '900 34px system-ui, sans-serif';
+    c.fillText(won ? 'VICTORY!' : 'FULL TIME', W / 2, H * 0.28);
+  }
   c.fillStyle = '#ffffff';
   c.font = '800 30px system-ui, sans-serif';
   drawFlag(c, m.home.def.code, W / 2 - 150, H * 0.44 - 16, 46, 32);
@@ -1459,7 +1510,7 @@ function drawFullTime(c) {
     c.font = '600 14px system-ui, sans-serif';
     c.fillText('after golden goal', W / 2, H * 0.44 + 34);
   }
-  blinkText(c, 'TAP TO CONTINUE', W / 2, H * 0.68);
+  blinkText(c, m.sim ? 'NEXT MATCH COMING UP…' : 'TAP TO CONTINUE', W / 2, H * 0.68);
 }
 
 function blinkText(c, txt, x, y) {
@@ -1509,7 +1560,7 @@ function renderMatch(c) {
     c.fillRect(0, 0, W, H);
   }
   drawHUD(c);
-  if (IS_TOUCH && 'play kickoff goal ggintro halftime'.includes(m.phase)) drawControls(c);
+  if (IS_TOUCH && !m.sim && 'play kickoff goal ggintro halftime'.includes(m.phase)) drawControls(c);
   drawBanner(c);
   if (m.phase === 'fulltime') drawFullTime(c);
   if (m.phase === 'paused') {
@@ -1530,11 +1581,11 @@ function renderMenu(c) {
   c.fillStyle = 'rgba(4,10,7,0.68)';
   c.fillRect(0, 0, W, H);
 
-  // Bouncing ball ornament.
-  const bx = W / 2, bounce = Math.abs(Math.sin(gTime * 3.1)) * 34, by = H * 0.62 - bounce;
+  // Bouncing ball ornament (kept clear of the mode buttons).
+  const obx = W * 0.13, bounce = Math.abs(Math.sin(gTime * 3.1)) * 34, oby = H * 0.66 - bounce;
   c.fillStyle = 'rgba(0,0,0,0.3)';
-  c.beginPath(); c.ellipse(bx, H * 0.62 + 16, 15 - bounce * 0.15, 5, 0, 0, TAU); c.fill();
-  drawBallAt(c, bx, by, 15, gTime * 8);
+  c.beginPath(); c.ellipse(obx, H * 0.66 + 16, 15 - bounce * 0.15, 5, 0, 0, TAU); c.fill();
+  drawBallAt(c, obx, oby, 15, gTime * 8);
 
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.save();
@@ -1546,21 +1597,48 @@ function renderMenu(c) {
   c.restore();
   c.fillStyle = '#7ce8a8';
   c.font = '700 16px system-ui, sans-serif';
-  c.fillText('⚽  KNOCKOUT TOURNAMENT  ⚽', W / 2, H * 0.26 + 44);
+  c.fillText('⚽  KNOCKOUT TOURNAMENT  ⚽', W / 2, H * 0.26 + 40);
+  c.fillStyle = 'rgba(255,215,64,0.85)';
+  c.font = '600 12px system-ui, sans-serif';
+  c.fillText('LIVE-SIMULATED RESULTS — 10,000+ POSSIBLE SCENARIOS, EVERY CUP IS DIFFERENT', W / 2, H * 0.26 + 64);
 
   // Flag strip.
   const fw = 40, fh = 28, gap = 12;
   const total = TEAMS.length * fw + (TEAMS.length - 1) * gap;
   let fx = W / 2 - total / 2;
   for (const t of TEAMS) {
-    drawFlag(c, t.code, fx, H * 0.44 - fh / 2, fw, fh);
+    drawFlag(c, t.code, fx, H * 0.47 - fh / 2, fw, fh);
     fx += fw + gap;
   }
-  blinkText(c, 'TAP TO START', W / 2, H * 0.8);
+
+  // Mode buttons.
+  uiHits.length = 0;
+  const bw = Math.min(420, W * 0.52), bh = 52;
+  const bx = W / 2 - bw / 2;
+  const modes = [
+    { mode: 'watch', y: H * 0.60, main: '▶  WATCH THE CUP — CPU vs CPU', sub: 'Full auto tournament · hard AI both sides', accent: true },
+    { mode: 'play',  y: H * 0.60 + bh + 14, main: '🎮  PLAY THE CUP YOURSELF', sub: 'Pick a nation and fight through the bracket', accent: false },
+  ];
+  for (const mset of modes) {
+    const pulse = mset.accent ? 0.10 + 0.06 * Math.sin(gTime * 3.4) : 0;
+    c.fillStyle = mset.accent ? 'rgba(124,232,168,' + (0.16 + pulse) + ')' : 'rgba(255,255,255,0.08)';
+    roundRect(c, bx, mset.y, bw, bh, 14);
+    c.fill();
+    c.strokeStyle = mset.accent ? '#7ce8a8' : 'rgba(255,255,255,0.25)';
+    c.lineWidth = mset.accent ? 2 : 1.2;
+    c.stroke();
+    c.fillStyle = '#ffffff';
+    c.font = '800 15px system-ui, sans-serif';
+    c.fillText(mset.main, W / 2, mset.y + 20);
+    c.fillStyle = 'rgba(234,255,242,0.6)';
+    c.font = '500 11px system-ui, sans-serif';
+    c.fillText(mset.sub, W / 2, mset.y + 38);
+    uiHits.push({ x: bx, y: mset.y, w: bw, h: bh, mode: mset.mode });
+  }
   if (!IS_TOUCH) {
     c.fillStyle = 'rgba(234,255,242,0.45)';
     c.font = '500 12px system-ui, sans-serif';
-    c.fillText('Desktop: WASD / arrows to move · X = pass · SPACE (hold) = shoot', W / 2, H * 0.9);
+    c.fillText('Desktop: WASD / arrows to move · X = pass · SPACE (hold) = shoot', W / 2, H - 12);
   }
 }
 
@@ -1649,7 +1727,7 @@ function renderBracket(c, overlayText, overlayCol) {
   const cardW = Math.min(128, W * 0.19), cardH = 52;
   const cQF = W * 0.06, cSF = W * 0.33, cF = W * 0.60;
   const top = H * 0.16, bh = H * 0.72;
-  const next = playerMatch();
+  const next = nextMatch();
 
   const pos = { qf: [], sf: [], f: [] };
   for (let i = 0; i < 4; i++) {
@@ -1710,8 +1788,12 @@ function renderBracket(c, overlayText, overlayCol) {
     c.fillText(overlayText, W / 2, H * 0.46);
     blinkText(c, 'TAP FOR MAIN MENU', W / 2, H * 0.56);
   } else if (next) {
-    const vs = TEAMS[next.a === tour.player ? next.b : next.a];
-    blinkText(c, ROUND_NAMES[tour.round] + ' vs ' + vs.name.toUpperCase() + ' — TAP TO KICK OFF', W / 2, H * 0.94);
+    if (tour.simAll) {
+      blinkText(c, 'AUTO — NEXT: ' + ROUND_NAMES[tour.round] + '  ' + TEAMS[next.a].code + ' vs ' + TEAMS[next.b].code + '  (tap to skip ahead)', W / 2, H * 0.94);
+    } else {
+      const vs = TEAMS[next.a === tour.player ? next.b : next.a];
+      blinkText(c, ROUND_NAMES[tour.round] + ' vs ' + vs.name.toUpperCase() + ' — TAP TO KICK OFF', W / 2, H * 0.94);
+    }
   }
 }
 
@@ -1721,7 +1803,7 @@ function renderChampion(c) {
   c.fillRect(0, 0, W, H);
   if (Math.random() < 0.25) rainConfetti(3);
 
-  const t = TEAMS[tour.player];
+  const t = TEAMS[tour.champion !== null ? tour.champion : tour.player];
   c.textAlign = 'center'; c.textBaseline = 'middle';
 
   // Trophy.
@@ -1764,7 +1846,7 @@ function renderChampion(c) {
   c.textAlign = 'left';
   c.fillText(t.name, W / 2 - 22, H * 0.76);
   c.textAlign = 'center';
-  blinkText(c, 'TAP TO PLAY AGAIN', W / 2, H * 0.9);
+  blinkText(c, tour.simAll ? 'TAP FOR MAIN MENU' : 'TAP TO PLAY AGAIN', W / 2, H * 0.9);
   drawParticles(c, true);
 }
 
@@ -1780,6 +1862,11 @@ function frame(now) {
 
   updateParticles(dt);
   if (state === ST.MATCH && match) updateMatch(dt);
+  // CPU-vs-CPU cup runs itself: kick off the next tie from the bracket automatically.
+  if (state === ST.BRACKET && tour && tour.simAll && stateTime > 2.6) {
+    const nm = nextMatch();
+    if (nm) { Sound.whistle(); startMatch(nm); setState(ST.MATCH); }
+  }
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
