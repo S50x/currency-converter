@@ -562,14 +562,21 @@ function makePlayer(team, role, bx, by) {
   };
 }
 function formation(dir) {
-  // Anchor points for a team attacking in direction `dir` (+1 = right).
+  // 4-3-3, 11 players. Anchor points for a team attacking in direction `dir`.
   const mx = x => dir === 1 ? x : PW - x;
+  const XD = PW * 0.19, XM = PW * 0.38, XF = PW * 0.58;
   return [
-    ['GK', mx(26), CY],
-    ['DF', mx(PW * 0.24), PH * 0.30],
-    ['DF', mx(PW * 0.24), PH * 0.70],
-    ['FW', mx(PW * 0.60), PH * 0.32],
-    ['FW', mx(PW * 0.60), PH * 0.68],
+    ['GK', mx(24), CY],
+    ['DF', mx(XD), PH * 0.15],
+    ['DF', mx(XD), PH * 0.38],
+    ['DF', mx(XD), PH * 0.62],
+    ['DF', mx(XD), PH * 0.85],
+    ['MF', mx(XM), PH * 0.26],
+    ['MF', mx(XM), PH * 0.50],
+    ['MF', mx(XM), PH * 0.74],
+    ['FW', mx(XF), PH * 0.22],
+    ['FW', mx(XF), PH * 0.50],   // index 9 = central striker (kickoff taker)
+    ['FW', mx(XF), PH * 0.78],
   ];
 }
 function jerseyFor(def, opponentCol, gkTaken) {
@@ -610,7 +617,7 @@ function startMatch(bm) {
     bm, home, away, sim,
     halfLen: sim ? 42 : HALF_LEN,              // brisker matches when watching the CPU cup
     ball: { x: PW / 2, y: CY, vx: 0, vy: 0, r: 7, owner: null, lastKicker: null, freeT: 0, passTo: null, roll: 0 },
-    controlled: sim ? null : home.players[3],
+    controlled: sim ? null : home.players[9],   // central striker
     half: 1, t: 0, et: false,
     phase: 'kickoff', phaseT: 0,
     banner: null,            // {text, sub, t, dur}
@@ -636,8 +643,8 @@ function setKickoff() {
   }
   b.x = PW / 2; b.y = CY; b.vx = b.vy = 0;
   b.owner = null; b.passTo = null; b.freeT = 0; b.lastKicker = null;
-  // Kicking-off team's first forward starts on the ball.
-  const fw = m.kickoffBy.players[3];
+  // Kicking-off team's central striker starts on the ball.
+  const fw = m.kickoffBy.players[9];
   fw.x = PW / 2 - m.kickoffBy.dir * 26; fw.y = CY;
   m.phase = 'kickoff'; m.phaseT = 0;
   if (!m.sim && m.home === m.kickoffBy) m.controlled = fw;
@@ -795,8 +802,8 @@ function userActions(dt) {
 function anchor(p) {
   // Formation anchor pulled toward the ball.
   const b = match.ball;
-  const pull = p.role === 'GK' ? 0.04 : p.role === 'DF' ? 0.34 : 0.46;
-  const py = p.role === 'GK' ? 0 : p.role === 'DF' ? 0.35 : 0.42;
+  const pull = p.role === 'GK' ? 0.04 : p.role === 'DF' ? 0.30 : p.role === 'MF' ? 0.42 : 0.50;
+  const py = p.role === 'GK' ? 0 : p.role === 'DF' ? 0.32 : 0.40;
   return {
     x: clamp(p.baseX + (b.x - PW / 2) * pull, 20, PW - 20),
     y: clamp(p.baseY + (b.y - p.baseY) * py, 20, PH - 20),
@@ -828,6 +835,45 @@ function isOffside(team, receiver, ballX) {
   const line = offsideLineX(team);
   const MARGIN = 12; // leniency
   return team.dir === 1 ? receiver.x > line + MARGIN : receiver.x < line - MARGIN;
+}
+// Keeper on the ball: play out to the best open man, or clear it long under pressure.
+function gkDistribute(gk, clear) {
+  const team = gk.team, gx = team.dir === 1 ? PW : 0;
+  const laneBlocked = (tx, ty) => {
+    const dx = tx - gk.x, dy = ty - gk.y, d2 = dx * dx + dy * dy || 1;
+    for (const o of team.opp.players) {
+      const t = clamp(((o.x - gk.x) * dx + (o.y - gk.y) * dy) / d2, 0, 1);
+      if (dist(o.x, o.y, gk.x + dx * t, gk.y + dy * t) < 24) return true;
+    }
+    return false;
+  };
+  let best = null, bestScore = -1e9;
+  for (const mate of team.players) {
+    if (mate === gk || mate.role === 'GK') continue;
+    const d = dist(gk.x, gk.y, mate.x, mate.y);
+    if (d < 70) continue;                                  // too close to bother
+    let open = 1e9;
+    for (const o of team.opp.players) open = Math.min(open, dist(o.x, o.y, mate.x, mate.y));
+    let score = Math.min(open, 130) * 1.3;                 // strongly prefer open men
+    score += (mate.x - gk.x) * team.dir / PW * (clear ? 300 : 130);  // upfield, esp. when clearing
+    score -= Math.abs(d - (clear ? 360 : 210)) * 0.35;     // preferred distribution range
+    if (laneBlocked(mate.x, mate.y)) score -= 170;
+    if (open < 30) score -= 300;                           // marked
+    if (score > bestScore) { bestScore = score; best = mate; }
+  }
+  if (!best || (clear && bestScore < 40)) {
+    // No safe option (or under real pressure): hoof it long upfield toward a channel.
+    const ty = CY + (Math.random() < 0.5 ? -1 : 1) * rand(60, PH / 2 - 30);
+    kickBall(gk, gx - gk.x, ty - gk.y, 670);
+    match.ball.passTo = null;
+    return;
+  }
+  const d = dist(gk.x, gk.y, best.x, best.y);
+  const T = clamp(d / 620, 0.32, 0.9);
+  const tx = best.x + best.vx * T, ty = best.y + best.vy * T;
+  const speed = clamp(launchSpeedFor(dist(gk.x, gk.y, tx, ty), T), 380, clear ? 760 : 610);
+  kickBall(gk, tx - gk.x, ty - gk.y, speed);
+  match.ball.passTo = best;
 }
 function gkThink(p) {
   const b = match.ball, own = p.team.dir === 1 ? 0 : PW;
@@ -910,7 +956,7 @@ function aiThink(p, dt) {
       return;
     }
     // Everyone else: hold shape between the ball and our goal, keeping width.
-    const depth = p.role === 'DF' ? 0.30 : 0.52;              // defenders sit deeper
+    const depth = p.role === 'DF' ? 0.26 : p.role === 'MF' ? 0.42 : 0.55;  // defenders sit deeper
     const side = p.baseY < CY ? -1 : (p.baseY > CY ? 1 : 0);
     p.tx = clamp(lerp(own, b.x, depth), 34, PW - 34);
     p.ty = clamp(lerp(p.baseY, b.y, 0.32) + side * 18, 34, PH - 34);
@@ -929,9 +975,15 @@ function aiThink(p, dt) {
     p.ty = clamp(p.baseY + wide * 24 + (b.y - CY) * 0.22, 40, PH - 40);
     return;
   }
+  if (p.role === 'MF') {
+    // Midfield pushes up in support and offers a forward passing lane.
+    p.tx = clamp(lerp(p.baseX, gx - team.dir * 150, 0.5), 40, PW - 40);
+    p.ty = clamp(p.baseY + (b.y - CY) * 0.3, 40, PH - 40);
+    return;
+  }
   // Defenders support from behind: hold width, give a safe back-pass option.
-  p.tx = clamp(lerp(p.baseX, b.x, 0.38), 40, PW - 40);
-  p.ty = clamp(p.baseY + (b.y - CY) * 0.2, 40, PH - 40);
+  p.tx = clamp(lerp(p.baseX, b.x, 0.32), 40, PW - 40);
+  p.ty = clamp(p.baseY + (b.y - CY) * 0.18, 40, PH - 40);
 }
 
 /* ---------- physics ---------- */
@@ -999,12 +1051,14 @@ function ballPhysics(dt) {
 
   if (b.owner) {
     const p = b.owner;
-    // Auto-punt when a keeper has held it long enough.
-    if (p.role === 'GK' && p.gkHold > (p.team.user ? 1.5 : 0.9)) {
-      const mate = p.team.players[Math.random() < 0.5 ? 3 : 4];
-      kickBall(p, mate.x - p.x + rand(-30, 30), mate.y - p.y + rand(-20, 20), 560);
-      b.passTo = mate;
-      return;
+    // Keeper distribution: clear at once when pressed, else play out after a brief look-up.
+    if (p.role === 'GK') {
+      let press = 1e9;
+      for (const o of p.team.opp.players) press = Math.min(press, dist(o.x, o.y, p.x, p.y));
+      if (press < 82 || p.gkHold > (p.team.user ? 1.2 : 0.9)) {
+        gkDistribute(p, press < 82);
+        return;
+      }
     }
     const tx = p.x + p.fx * (p.r + b.r + 2);
     const ty = p.y + p.fy * (p.r + b.r + 2);
@@ -1079,14 +1133,14 @@ function ballPhysics(dt) {
       if (b.freeT > 0 && p === b.lastKicker) continue;
       const d = dist(p.x, p.y, b.x, b.y);
       let reach = p.r + b.r + (p.lunge > 0 ? 9 : 3);
-      // Keepers have long arms; in CPU-vs-CPU both are strong but slightly more
-      // beatable so scorelines stay varied and entertaining.
-      if (p.role === 'GK') reach += p.team.gkPlus ? (m.sim ? 12 : 15) : 8;
+      // Keepers have long arms; in CPU-vs-CPU both are strong but more beatable
+      // so goals actually happen with 11-a-side and scorelines stay varied.
+      if (p.role === 'GK') reach += p.team.gkPlus ? (m.sim ? 8 : 15) : 8;
       if (d < reach && d < bd) { bd = d; taker = p; }
     }
     if (taker) {
       const speed = Math.hypot(b.vx, b.vy);
-      const fumbleP = taker.team.gkPlus ? (m.sim ? 0.24 : 0.14) : 0.4;
+      const fumbleP = taker.team.gkPlus ? (m.sim ? 0.34 : 0.14) : 0.42;
       if (taker.role === 'GK' && speed > 560 && Math.random() < fumbleP) {
         // Fumbled save: parry the shot away.
         const n = norm(b.x - taker.x, b.y - taker.y);
@@ -1142,10 +1196,16 @@ function updateMatch(dt) {
             endMatch();
           } else {
             m.et = true; m.phase = 'ggintro'; m.phaseT = 0;
+            m.etEnd = m.t + m.halfLen * 0.9;   // golden-goal deadline
             showBanner('GOLDEN GOAL', 'Next goal wins the tie!', 2.2);
             Sound.whistle(2);
           }
         }
+      } else if (m.t >= m.etEnd) {
+        // Golden goal has run long enough — settle the tie with a decisive goal
+        // (weighted by team quality) so a match can never stall forever.
+        const hp = m.home.skill / (m.home.skill + m.away.skill);
+        scoreGoal(Math.random() < hp ? m.home : m.away);
       }
       break;
     }
