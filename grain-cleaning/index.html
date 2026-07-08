@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة مقارنة خطوط تنظيف نخالة القمح والشعير</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#111611; --surface:#1b241b; --surface2:#222e22; --line:#324032;
+  --wheat:#e3b23c; --wheat-dim:#9a7a2c; --field:#7fae67; --sky:#8db7c9;
+  --ink:#f2efe4; --muted:#a8b3a0; --red:#d97a6a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',sans-serif;min-height:100vh}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+header{padding:26px 0 8px}
+.eyebrow{color:var(--wheat);font-size:13px;letter-spacing:.5px;font-weight:700}
+h1{font-family:'Baloo Bhaijaan 2',sans-serif;font-size:clamp(26px,4.5vw,40px);font-weight:800;line-height:1.25;margin:6px 0 8px}
+h1 span{color:var(--wheat)}
+.sub{color:var(--muted);font-size:14px;max-width:640px;line-height:1.8}
+.meta-strip{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.meta-chip{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:12.5px;color:var(--muted)}
+.meta-chip b{color:var(--ink);font-weight:700}
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:22px 0 18px;position:sticky;top:0;background:linear-gradient(var(--bg) 85%,transparent);padding:12px 0;z-index:5}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:8px 16px;font-size:13.5px;font-family:inherit;cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--wheat-dim)}
+.chip.on{background:var(--wheat);color:#1c1608;border-color:var(--wheat);font-weight:700}
+.chip:focus-visible{outline:2px solid var(--wheat);outline-offset:2px}
+.spacer{flex:1}
+/* cards */
+.grid{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;grid-template-columns:56px 1fr;gap:14px;transition:border-color .15s}
+.card:hover{border-color:var(--wheat-dim)}
+.rank{font-family:'Baloo Bhaijaan 2',sans-serif;font-size:30px;font-weight:800;color:var(--wheat);background:var(--surface2);border:1px solid var(--line);border-radius:12px;height:56px;display:flex;align-items:center;justify-content:center}
+.card h2{font-family:'Baloo Bhaijaan 2',sans-serif;font-size:19px;font-weight:700;line-height:1.4}
+.seller{color:var(--muted);font-size:13.5px;margin-top:2px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{font-size:11.5px;border-radius:6px;padding:3px 9px;border:1px solid var(--line);color:var(--muted)}
+.tag.country{background:rgba(141,183,201,.12);color:var(--sky);border-color:transparent}
+.tag.local{background:rgba(127,174,103,.14);color:var(--field);border-color:transparent}
+.tag.est{background:rgba(217,122,106,.12);color:var(--red);border-color:transparent}
+/* cost table */
+.costs{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:14px}
+.cost{background:var(--surface2);border-radius:10px;padding:10px 12px}
+.cost .l{font-size:11px;color:var(--muted)}
+.cost .v{font-size:14.5px;font-weight:700;margin-top:3px}
+.cost.total{background:rgba(227,178,60,.12);border:1px solid rgba(227,178,60,.35)}
+.cost.total .v{color:var(--wheat);font-size:15.5px}
+/* stacked bar */
+.bar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin-top:12px;background:var(--surface2)}
+.bar i{display:block;height:100%}
+.seg-device{background:var(--wheat)}
+.seg-ship{background:var(--sky)}
+.seg-tax{background:var(--field)}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-inline-start:4px;vertical-align:middle}
+/* actions */
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.btn{border-radius:11px;padding:14px 22px;font-size:16px;font-weight:700;font-family:inherit;text-decoration:none;cursor:pointer;border:1px solid var(--line);color:var(--ink);background:var(--surface2);transition:.15s}
+.btn.primary{background:var(--wheat);color:#1c1608;border-color:var(--wheat)}
+.btn.wa{background:#25d366;color:#04310f;border-color:#25d366}
+.btn:hover{transform:translateY(-1px)}
+.btn:focus-visible{outline:2px solid var(--wheat);outline-offset:2px}
+.note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7}
+/* footer disclaimer */
+.disclaimer{margin-top:26px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font-size:12.5px;color:var(--muted);line-height:1.9}
+.disclaimer b{color:var(--wheat)}
+.hidden{display:none}
+.callnow{display:block;text-align:center;background:#25d366;color:#04310f;font-family:'Baloo Bhaijaan 2',sans-serif;font-weight:800;font-size:19px;text-decoration:none;padding:18px;border-radius:14px;margin:18px 0 4px;box-shadow:0 4px 16px rgba(37,211,102,.25)}
+.callnow:hover{transform:translateY(-1px)}
+@media(max-width:560px){.card{grid-template-columns:1fr}.rank{width:56px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">مقارنة موردين · خطوط تنظيف وغربلة الحبوب</div>
+  <h1>خطوط تنظيف شوائب <span>القمح والشعير</span> — مرتبة حسب الملاءمة والسعر</h1>
+  <p class="sub">مقارنة موردين لخطوط تنظيف الحبوب من الغبار والقش والحجارة والشوائب. المكائن المخصصة للتنظيف مرتبة أولاً (ثم من الأرخص للأغلى)، والمكائن الأقل ملاءمة في الأسفل. مع تكلفة الشحن والجمارك والضريبة حتى وصولها لموقعك.</p>
+  <div class="meta-strip">
+    <div class="meta-chip">آخر تحديث: <b>يوليو 2026</b></div>
+    <div class="meta-chip">سعر الصرف: <b>1 دولار = 3.75 ريال</b></div>
+    <div class="meta-chip">جمارك: <b>5%</b> + ضريبة قيمة مضافة: <b>15%</b></div>
+    <div class="meta-chip">شهادة سابر (SABER) <b>إلزامية</b> للاستيراد</div>
+  </div>
+
+  <a class="callnow" href="tel:0115501678">📞 اتصل بأقرب مورّد الآن — AMMC الخرج</a>
+</header>
+
+<div class="controls" id="filters">
+  <button class="chip on" data-f="all">الكل</button>
+  <button class="chip" data-f="السعودية">🇸🇦 السعودية</button>
+  <button class="chip" data-f="الصين">🇨🇳 الصين</button>
+  <button class="chip" data-f="تركيا">🇹🇷 تركيا</button>
+  <button class="chip" data-f="سوريا">🇸🇾 سوريا</button>
+  <span class="spacer"></span>
+  <button class="chip" id="sortBtn">↕ الترتيب: الأرخص أولاً</button>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="disclaimer">
+  <b>ملاحظات مهمة قبل الشراء:</b>
+  ① الأسعار المعلّمة بـ «تقديري» هي نطاقات مبنية على متوسطات السوق — السعر النهائي يكون بعرض سعر رسمي من المورد حسب الطاقة الإنتاجية المطلوبة (طن/ساعة).
+  ② أسعار الشحن البحري من الصين للسعودية مرتفعة حالياً (يوليو 2026) بسبب علاوة مخاطر مضيق هرمز: حاوية 20 قدم ≈ 19–23 ألف ريال، وحاوية 40 قدم ≈ 25–30 ألف ريال، والشحن الجزئي LCL ≈ 75 ريال/م³ — تأكد من عرض سعر جديد عند الحجز لأن الأسعار متقلبة.
+  ③ مدة الشحن البحري من الصين 14–20 يوم، ومن تركيا أقل.
+  ④ تحقق من السجل التجاري لأي بائع سعودي عبر موقع وزارة التجارة، ولا تحوّل مبالغ لبائعي حراج قبل المعاينة.
+  ⑤ التركيب للخطوط الكاملة يضيف عادة 10–20% ويشمل مهندس تركيب وتشغيل تجريبي. الضمان المعتاد سنة، وقطع الغيار الاستهلاكية هي شبك الغرابيل والكرات المطاطية والسيور.
+  ⑥ نقطة فنية: الغربال ينظف الحبوب أو النخالة من الشوائب — لكن إنتاج النخالة نفسها من الحبة يحتاج مرحلة تقشير (Huller/Peeler) أو طحن، متوفرة في خيارات Akyurek وPingle.
+</div>
+</div>
+
+<script>
+const SAR = n => n.toLocaleString('ar-SA') + ' ريال';
+const products = [
+  {
+    name:'خط غربلة وتنظيف حبوب (تصنيع غرابيل هزازة) — معروض بالرياض',
+    seller:'العالمية للآلات — إعلان حراج (الرياض)',
+    country:'السعودية', origin:'تصنيع محلي / متفاوت — اسأل البائع',
+    type:'غربال هزاز وتنظيف', capacity:'حسب المعروض',
+    fit:'ممتاز — غربلة وتنظيف مباشر', fitLvl:'best',
+    device:[0,0], ship:[0,0], tax:[0,0], est:true, quote:true,
+    shipNote:'استلام محلي بالرياض — بدون شحن ولا جمارك',
+    warranty:'اسأل البائع — عاين قبل الدفع',
+    site:'https://haraj.com.sa/en/1139789252/%D8%BA%D8%B1%D8%A8%D8%A7%D9%84_%D9%87%D8%B2%D8%A7%D8%B2/', phone:null,
+    contactNote:'⚠️ الرقم مخفي — افتح الإعلان بتطبيق حراج واضغط زر «تواصل» ليظهر رقم البائع'
+  },
+  {
+    name:'وكيل معدات زراعية (فروع بمناطق القمح: الخرج وبريدة) — للسؤال والإحالة',
+    seller:'شركة الآلات والمواد الزراعية AMMC / Agrimatco',
+    country:'السعودية', origin:'موزّع — حسب المنتج',
+    type:'معدات زراعية ومستلزمات — اسأل عن الغرابيل', capacity:'—',
+    fit:'جيد — جهة اتصال محلية موثوقة', fitLvl:'best',
+    device:[0,0], ship:[0,0], tax:[0,0], est:true, quote:true,
+    shipNote:'فروع داخل المملكة — الخرج وبريدة والرياض وجدة',
+    warranty:'خدمات ما بعد بيع مذكورة',
+    site:'https://www.ammc.com.sa/arabic.php', phone:'0115501678',
+    contactNote:'اتصل واسأل مباشرة عن: غربال حبوب / فرازة قمح / فاصل حجارة. الخرج 0115501678 · بريدة 0163249932 · موحّد 920011133'
+  },
+  {
+    name:'خطوط مطاحن وتنظيف قمح كاملة (تسليم مفتاح) — للمشاريع الكبيرة',
+    seller:'بوهلر Bühler — فرعا الرياض وجدة',
+    country:'السعودية', origin:'سويسرا / الصين',
+    type:'قسم تنظيف ضمن خط مطحنة (فاصل حجارة + شفاطات + منظف هواء-غربال)', capacity:'صناعي كبير',
+    fit:'ممتاز تقنياً — لكن لمشاريع المطاحن والصوامع', fitLvl:'best',
+    device:[0,0], ship:[0,0], tax:[0,0], est:true, quote:true,
+    shipNote:'دعم ميداني محلي دائم من مكتبي الرياض وجدة',
+    warranty:'تسليم مفتاح + تركيب + صيانة وتدريب + قطع غيار',
+    site:'https://www.buhlergroup.com/content/buhlergroup/global/en/locations/Saudi-Arabia-Riyadh-Saudi-Arabia.html', phone:'0114779670',
+    contactNote:'للمشاريع الكبيرة فقط. الرياض 0114779670 · بريد buhler.saudi@buhlergroup.com (يُنصح بتأكيد الرقم بالاتصال)'
+  },
+  {
+    name:'مكينة تنظيف قمح وشعير (غربال هزاز + فصل هوائي لإزالة الغبار والقش)',
+    seller:'موردون موثّقون — منصة Alibaba',
+    country:'الصين', origin:'الصين',
+    type:'تنظيف وغربلة الشوائب', capacity:'1–5 طن/ساعة',
+    fit:'ممتاز — مخصصة لتنظيف الشوائب', fitLvl:'best',
+    device:[4835,15000], ship:[1300,2600], tax:[1050,3100], est:true,
+    shipNote:'شحن جزئي LCL (~75 ريال/م³) + مناولة وتخليص',
+    warranty:'ضمان سنة — قطع غيار حسب المورد',
+    site:'https://www.alibaba.com', phone:null,
+    contactNote:'التواصل والدفع عبر شات المنصة (أأمن طريقة)'
+  },
+  {
+    name:'خط غربال قمح وشعير حديث (معروض محلياً)',
+    seller:'بائع محلي — منصة حراج',
+    country:'السعودية', origin:'متفاوت — اسأل البائع عن بلد الصنع',
+    type:'خط غربلة وتنظيف كامل', capacity:'حسب الخط المعروض',
+    fit:'ممتاز — تنظيف وغربلة مباشرة', fitLvl:'best',
+    device:[15000,40000], ship:[0,0], tax:[0,0], est:true,
+    shipNote:'استلام محلي — بدون شحن دولي ولا جمارك',
+    warranty:'حسب اتفاقك مع البائع — عاين قبل الدفع',
+    site:'https://haraj.com.sa', phone:null,
+    contactNote:'الرقم يظهر بزر «تواصل» داخل الإعلان — ابحث: خط غربال قمح وشعير'
+  },
+  {
+    name:'معمل تنقية بغربال اهتزازي 3 طبقات + حجرة هواء لفصل القش والشوائب الخفيفة',
+    seller:'منشأة درباس لآلات الغربلة والتنقية',
+    country:'سوريا', origin:'سوريا',
+    type:'خط تنقية وتنظيف شوائب', capacity:'متعدد السعات',
+    fit:'ممتاز — مصمم لتنظيف الحبوب من الشوائب', fitLvl:'best',
+    device:[40000,110000], ship:[6000,12000], tax:[9500,25000], est:true,
+    shipNote:'شحن بري/بحري للسعودية + جمارك 5% + ضريبة 15%',
+    warranty:'حسب العقد — اطلبه مكتوباً',
+    site:'http://www.derbasgroup.com', phone:null,
+    contactNote:'نموذج التواصل في موقعهم الرسمي'
+  },
+  {
+    name:'خط تنظيف قمح وشعير (تنظيف مسبق + غربلة + فاصل حجارة + فصل هوائي)',
+    seller:'Akyurek Group — مرسين، تركيا (تصدير لـ 95 دولة)',
+    country:'تركيا', origin:'تركيا',
+    type:'خط تنظيف شوائب احترافي', capacity:'5–100 طن/ساعة',
+    fit:'ممتاز — خط تنظيف شوائب متكامل', fitLvl:'best',
+    device:[56000,188000], ship:[6000,12000], tax:[12800,41000], est:true,
+    shipNote:'حاوية من ميناء مرسين لجدة — أرخص وأسرع من الصين',
+    warranty:'ضمان رسمي + فريق ما بعد البيع للتركيب وقطع الغيار',
+    site:'https://akyurek.com', phone:null,
+    contactNote:'طلب عرض سعر من موقعهم الرسمي — دعم تركيب وصيانة'
+  },
+  {
+    name:'قسم تنظيف قمح وشعير من خط Pingle (غربال هزاز + فاصل شفط + فاصل حجارة)',
+    seller:'Pingle — الصين',
+    country:'الصين', origin:'الصين',
+    type:'قسم تنظيف شوائب صناعي', capacity:'10 طن/ساعة فأكثر',
+    fit:'ممتاز — قسم تنظيف صناعي', fitLvl:'best',
+    device:[60000,220000], ship:[19000,45000], tax:[15000,52000], est:true,
+    shipNote:'حاوية 20–40 قدم (أسعار الخليج مرتفعة حالياً) + تخليص',
+    warranty:'ضمان + مهندس تركيب وتشغيل تجريبي (يضاف 10–20%)',
+    site:'http://plflourmill.asia', phone:null,
+    contactNote:'طلب عرض سعر رسمي من الموقع حسب الطاقة'
+  },
+  {
+    name:'جراشة أعلاف 500 كجم/ساعة (بها غرابيل — تنظيف أساسي محدود)',
+    seller:'متجر نور الشفق الأحمر (متجر سعودي إلكتروني)',
+    country:'السعودية', origin:'الصين (تُباع محلياً)',
+    type:'جرش — تنظيف أساسي فقط', capacity:'0.5 طن/ساعة',
+    fit:'محدود — وظيفتها الأساسية الجرش', fitLvl:'low',
+    device:[2900,2900], ship:[0,0], tax:[0,0], est:false,
+    shipNote:'شحن مجاني داخل المملكة — السعر شامل',
+    warranty:'ضمان سنة على المحرك',
+    site:'https://nur-alshifaq-alahmar.com', phone:null,
+    contactNote:'التواصل عبر المتجر الإلكتروني مباشرة'
+  },
+  {
+    name:'مكابس وخطوط أعلاف (تكبيس علف — ليست للتنظيف)',
+    seller:'الابتكارات الهندسية لمعدات الأعلاف — الرياض',
+    country:'السعودية', origin:'الصين (تجميع وتوريد محلي)',
+    type:'تكبيس أعلاف — ليست للتنظيف', capacity:'حتى 1.5 طن/ساعة',
+    fit:'غير مناسب — وظيفتها التكبيس', fitLvl:'low',
+    device:[3000,45000], ship:[0,0], tax:[0,0], est:true,
+    shipNote:'شحن مجاني حسب إعلاناتهم — بدون جمارك',
+    warranty:'ضمان سنة على المحرك',
+    site:'https://haraj.com.sa', phone:'0562470162', wa:true,
+    contactNote:'واتساب واتصال — وإعلاناتهم على حراج'
+  }
+];
+
+products.forEach(p=>{
+  p.totLo = p.device[0]+p.ship[0]+p.tax[0];
+  p.totHi = p.device[1]+p.ship[1]+p.tax[1];
+  p.mid = (p.totLo+p.totHi)/2;
+});
+
+let asc = true, filter = 'all';
+const grid = document.getElementById('grid');
+
+function rangeTxt(a,b,est){
+  const t = a===b ? SAR(a) : SAR(a)+' – '+SAR(b);
+  return t + (est?' <span style="color:var(--red);font-size:11px">تقديري</span>':'');
+}
+
+function render(){
+  const rank = p => p.fitLvl==='best'?0:1;
+  const list = products
+    .filter(p=>filter==='all'||p.country===filter)
+    .sort((a,b)=> rank(a)-rank(b) || (asc? a.mid-b.mid : b.mid-a.mid));
+  grid.innerHTML = list.map((p,i)=>{
+    const tot = p.mid || 1;
+    const w1 = ((p.device[0]+p.device[1])/2)/tot*100;
+    const w2 = ((p.ship[0]+p.ship[1])/2)/tot*100;
+    const w3 = 100-w1-w2;
+    return `<article class="card">
+      <div class="rank">${i+1}</div>
+      <div>
+        <h2>${p.name}</h2>
+        <div class="seller">${p.seller}</div>
+        <div class="tags">
+          <span class="tag country">🏭 بلد الصنع: ${p.origin}</span>
+          <span class="tag ${p.country==='السعودية'?'local':''}">📍 البائع: ${p.country}</span>
+          <span class="tag ${p.fitLvl==='best'?'local':'est'}">${p.fitLvl==='best'?'✅':'⚠️'} ملاءمة التنظيف: ${p.fit}</span>
+          <span class="tag">⚙️ ${p.type}</span>
+          <span class="tag">📦 ${p.capacity}</span>
+          ${p.est?'<span class="tag est">سعر تقديري — يحتاج عرض رسمي</span>':''}
+        </div>
+        ${p.quote ? `<div class="costs"><div class="cost total" style="grid-column:1/-1"><div class="l">السعر</div><div class="v">يُحدَّد بعرض سعر — اتصل واسأل مباشرة</div></div></div>` : `<div class="costs">
+          <div class="cost"><div class="l">سعر المكينة</div><div class="v">${rangeTxt(p.device[0],p.device[1],p.est)}</div></div>
+          <div class="cost"><div class="l">الشحن للسعودية</div><div class="v">${p.ship[1]===0?'—':rangeTxt(p.ship[0],p.ship[1],true)}</div></div>
+          <div class="cost"><div class="l">جمارك 5% + ضريبة 15%</div><div class="v">${p.tax[1]===0?'—':rangeTxt(p.tax[0],p.tax[1],true)}</div></div>
+          <div class="cost total"><div class="l">التكلفة الإجمالية واصل</div><div class="v">${rangeTxt(p.totLo,p.totHi,p.est)}</div></div>
+        </div>
+        <div class="bar" aria-hidden="true">
+          <i class="seg-device" style="width:${w1}%"></i>
+          <i class="seg-ship" style="width:${w2}%"></i>
+          <i class="seg-tax" style="width:${w3}%"></i>
+        </div>
+        <div class="legend">
+          <span><i class="seg-device"></i> المكينة</span>
+          <span><i class="seg-ship"></i> الشحن</span>
+          <span><i class="seg-tax"></i> جمارك وضريبة</span>
+        </div>`}
+        <div class="actions">
+          ${p.phone?`<a class="btn primary" href="tel:${p.phone}">📞 اتصال مباشر</a><a class="btn wa" href="https://wa.me/966${p.phone.slice(1)}">💬 واتساب</a>`:''}
+          <a class="btn ${p.phone?'':'primary'}" href="${p.site}" target="_blank" rel="noopener">🌐 افتح صفحة البائع ←</a>
+        </div>
+        <p class="note">📌 ${p.contactNote} · 🚚 ${p.shipNote} · 🛡️ ${p.warranty}</p>
+      </div>
+    </article>`;
+  }).join('') || '<p style="color:var(--muted);padding:30px;text-align:center">لا توجد نتائج لهذه الدولة</p>';
+}
+
+document.getElementById('filters').addEventListener('click',e=>{
+  const b = e.target.closest('.chip'); if(!b) return;
+  if(b.id==='sortBtn'){
+    asc=!asc;
+    b.textContent = asc?'↕ الترتيب: الأرخص أولاً':'↕ الترتيب: الأغلى أولاً';
+    render(); return;
+  }
+  document.querySelectorAll('#filters .chip[data-f]').forEach(c=>c.classList.remove('on'));
+  b.classList.add('on');
+  filter = b.dataset.f;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
